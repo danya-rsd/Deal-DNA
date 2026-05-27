@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { saveDealToStore } from "@/hooks/useDealStore";
 import type { DealProfile } from "@/lib/scoringEngine";
@@ -10,9 +10,57 @@ const REV_MODELS = ["recurring", "transactional", "hybrid"];
 const CUST_SEGS = ["enterprise", "smb", "consumer", "government"];
 const MACRO = ["rate-stable", "rate-rising", "rate-falling", "recession"];
 
-const label: React.CSSProperties = { color: "#475569", fontSize: "0.68rem", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "0.4rem", display: "block" };
-const input: React.CSSProperties = { width: "100%", background: "#0f1623", border: "1px solid #1e293b", borderRadius: "8px", padding: "0.6rem 0.75rem", color: "#e2e8f0", fontSize: "0.85rem", fontFamily: "'JetBrains Mono', monospace", boxSizing: "border-box" };
+const labelStyle: React.CSSProperties = { color: "#475569", fontSize: "0.68rem", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "0.4rem", display: "block" };
+const inputStyle: React.CSSProperties = { width: "100%", background: "#0f1623", border: "1px solid #1e293b", borderRadius: "8px", padding: "0.6rem 0.75rem", color: "#e2e8f0", fontSize: "0.85rem", fontFamily: "'JetBrains Mono', monospace", boxSizing: "border-box" };
 
+// ─── These components MUST be defined outside WorkspacePage ───────────────────
+function TextInput({ label, value, onChange, type = "text", placeholder = "" }: {
+  label: string; value: string; onChange: (v: string) => void; type?: string; placeholder?: string;
+}) {
+  return (
+    <div>
+      <label style={labelStyle}>{label}</label>
+      <input
+        style={inputStyle}
+        type={type}
+        placeholder={placeholder}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+      />
+    </div>
+  );
+}
+
+function SelectInput({ label, value, onChange, options }: {
+  label: string; value: string; onChange: (v: string) => void; options: string[];
+}) {
+  return (
+    <div>
+      <label style={labelStyle}>{label}</label>
+      <select style={{ ...inputStyle, cursor: "pointer" }} value={value} onChange={e => onChange(e.target.value)}>
+        {options.map(o => <option key={o} value={o}>{o}</option>)}
+      </select>
+    </div>
+  );
+}
+
+function TextAreaInput({ label, value, onChange, placeholder = "" }: {
+  label: string; value: string; onChange: (v: string) => void; placeholder?: string;
+}) {
+  return (
+    <div>
+      <label style={labelStyle}>{label}</label>
+      <textarea
+        style={{ ...inputStyle, minHeight: "80px", resize: "vertical" }}
+        placeholder={placeholder}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+      />
+    </div>
+  );
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
 export default function WorkspacePage() {
   const router = useRouter();
   const [error, setError] = useState("");
@@ -24,13 +72,16 @@ export default function WorkspacePage() {
     holdPeriod: "", thesis: "",
   });
 
-  const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
+  const set = useCallback((k: string, v: string) => {
+    setForm(f => ({ ...f, [k]: v }));
+  }, []);
 
   const handleSubmit = () => {
     if (!form.companyName.trim()) { setError("Company name is required"); return; }
     if (!form.entryEV || !form.leverage || !form.evEbitda || !form.revenue || !form.ebitdaMargin) {
       setError("Please fill in all financial fields"); return;
     }
+    setError("");
     const profile: DealProfile = {
       companyName: form.companyName,
       sector: form.sector,
@@ -52,22 +103,6 @@ export default function WorkspacePage() {
     router.push("/report");
   };
 
-  const Field = ({ label: l, k, type = "text", placeholder = "" }: { label: string; k: string; type?: string; placeholder?: string }) => (
-    <div>
-      <label style={label}>{l}</label>
-      <input style={input} type={type} placeholder={placeholder} value={(form as any)[k]} onChange={e => set(k, e.target.value)} />
-    </div>
-  );
-
-  const Select = ({ label: l, k, options }: { label: string; k: string; options: string[] }) => (
-    <div>
-      <label style={label}>{l}</label>
-      <select style={{ ...input, cursor: "pointer" }} value={(form as any)[k]} onChange={e => set(k, e.target.value)}>
-        {options.map(o => <option key={o} value={o}>{o}</option>)}
-      </select>
-    </div>
-  );
-
   return (
     <div style={{ minHeight: "100vh", background: "#080c12", fontFamily: "'JetBrains Mono', monospace" }}>
       <nav style={{ borderBottom: "1px solid #1e293b", padding: "0 2rem", height: "52px", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, background: "#080c12", zIndex: 50 }}>
@@ -82,14 +117,17 @@ export default function WorkspacePage() {
         <p style={{ color: "#475569", fontSize: "0.82rem", marginBottom: "2rem" }}>Enter deal parameters to generate an IC intelligence report</p>
 
         <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+
           {/* Company */}
           <div style={{ background: "#0a0e17", border: "1px solid #1e293b", borderRadius: "12px", padding: "1.25rem" }}>
             <div style={{ color: "#94a3b8", fontSize: "0.7rem", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: "1rem" }}>Company</div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "1rem" }}>
-              <div style={{ gridColumn: "1/-1" }}><Field label="Company Name" k="companyName" placeholder="e.g. TechStack Holdings" /></div>
-              <Select label="Sector" k="sector" options={SECTORS} />
-              <Select label="Geography" k="geography" options={GEOS} />
-              <Select label="Macro Regime" k="macroRegime" options={MACRO} />
+              <div style={{ gridColumn: "1/-1" }}>
+                <TextInput label="Company Name" value={form.companyName} onChange={v => set("companyName", v)} placeholder="e.g. TechStack Holdings" />
+              </div>
+              <SelectInput label="Sector" value={form.sector} onChange={v => set("sector", v)} options={SECTORS} />
+              <SelectInput label="Geography" value={form.geography} onChange={v => set("geography", v)} options={GEOS} />
+              <SelectInput label="Macro Regime" value={form.macroRegime} onChange={v => set("macroRegime", v)} options={MACRO} />
             </div>
           </div>
 
@@ -97,14 +135,14 @@ export default function WorkspacePage() {
           <div style={{ background: "#0a0e17", border: "1px solid #1e293b", borderRadius: "12px", padding: "1.25rem" }}>
             <div style={{ color: "#94a3b8", fontSize: "0.7rem", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: "1rem" }}>Financial Profile</div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "1rem" }}>
-              <Field label="Entry EV ($M)" k="entryEV" type="number" placeholder="850" />
-              <Field label="Revenue ($M)" k="revenue" type="number" placeholder="210" />
-              <Field label="EBITDA Margin (%)" k="ebitdaMargin" type="number" placeholder="26" />
-              <Field label="EV/EBITDA (x)" k="evEbitda" type="number" placeholder="11.2" />
-              <Field label="Leverage (x)" k="leverage" type="number" placeholder="6.0" />
-              <Field label="Hold Period (yrs)" k="holdPeriod" type="number" placeholder="4" />
-              <Field label="Target MOIC (x)" k="targetMoic" type="number" placeholder="3.0" />
-              <Field label="Target IRR (%)" k="targetIrr" type="number" placeholder="28" />
+              <TextInput label="Entry EV ($M)" value={form.entryEV} onChange={v => set("entryEV", v)} type="number" placeholder="850" />
+              <TextInput label="Revenue ($M)" value={form.revenue} onChange={v => set("revenue", v)} type="number" placeholder="210" />
+              <TextInput label="EBITDA Margin (%)" value={form.ebitdaMargin} onChange={v => set("ebitdaMargin", v)} type="number" placeholder="26" />
+              <TextInput label="EV/EBITDA (x)" value={form.evEbitda} onChange={v => set("evEbitda", v)} type="number" placeholder="11.2" />
+              <TextInput label="Leverage (x)" value={form.leverage} onChange={v => set("leverage", v)} type="number" placeholder="6.0" />
+              <TextInput label="Hold Period (yrs)" value={form.holdPeriod} onChange={v => set("holdPeriod", v)} type="number" placeholder="4" />
+              <TextInput label="Target MOIC (x)" value={form.targetMoic} onChange={v => set("targetMoic", v)} type="number" placeholder="3.0" />
+              <TextInput label="Target IRR (%)" value={form.targetIrr} onChange={v => set("targetIrr", v)} type="number" placeholder="28" />
             </div>
           </div>
 
@@ -112,21 +150,19 @@ export default function WorkspacePage() {
           <div style={{ background: "#0a0e17", border: "1px solid #1e293b", borderRadius: "12px", padding: "1.25rem" }}>
             <div style={{ color: "#94a3b8", fontSize: "0.7rem", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: "1rem" }}>Deal Profile</div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
-              <Select label="Revenue Model" k="revenueModel" options={REV_MODELS} />
-              <Select label="Customer Segment" k="customerSegment" options={CUST_SEGS} />
+              <SelectInput label="Revenue Model" value={form.revenueModel} onChange={v => set("revenueModel", v)} options={REV_MODELS} />
+              <SelectInput label="Customer Segment" value={form.customerSegment} onChange={v => set("customerSegment", v)} options={CUST_SEGS} />
               <div style={{ gridColumn: "1/-1" }}>
-                <label style={label}>Investment Thesis</label>
-                <textarea
-                  style={{ ...input, minHeight: "80px", resize: "vertical" }}
-                  placeholder="Describe the investment thesis..."
-                  value={form.thesis}
-                  onChange={e => set("thesis", e.target.value)}
-                />
+                <TextAreaInput label="Investment Thesis" value={form.thesis} onChange={v => set("thesis", v)} placeholder="Describe the investment thesis..." />
               </div>
             </div>
           </div>
 
-          {error && <div style={{ background: "#ef444420", border: "1px solid #ef444440", borderRadius: "8px", padding: "0.75rem 1rem", color: "#ef4444", fontSize: "0.8rem" }}>{error}</div>}
+          {error && (
+            <div style={{ background: "#ef444420", border: "1px solid #ef444440", borderRadius: "8px", padding: "0.75rem 1rem", color: "#ef4444", fontSize: "0.8rem" }}>
+              {error}
+            </div>
+          )}
 
           <button
             onClick={handleSubmit}
